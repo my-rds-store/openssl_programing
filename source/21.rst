@@ -1,0 +1,363 @@
+############
+21 EVP   
+############
+
+***************
+21.1 EVP 简介  
+***************
+
+
+
+Openssl EVP(high-level cryptographic functions[1])提供了丰富的密码学中的各种函数。Openssl 中实现了各种对称算法、摘要算法以及签名/验签算法。EVP 函数将这些具体的算 法进行了封装。
+
+EVP 主要封装了如下功能函数:
+
+* 1)实现了 base64 编解码 BIO;
+* 2)实现了加解密 BIO;
+* 3)实现了摘要 BIO;
+* 4)实现了 reliable BIO;
+* 5)封装了摘要算法;
+* 6)封装了对称加解密算法; 
+* 7)封装了非对称密钥的加密(公钥)、解密(私钥)、签名与验证以及辅助函数; 
+* 7)基于口令的加密(PBE);
+* 8)对称密钥处理;
+* 9)数字信封:数字信封用对方的公钥加密对称密钥，数据则用此对称密钥加密。 发送给对方时，同时发送对称密钥密文和数据密文。接收方首先用自己的私钥解密密钥 密文，得到对称密钥，然后用它解密数据。
+* 10)其他辅助函数。
+
+
+
+*************
+21.2 数据结构
+*************
+
+EVP 数据结构定义在 crypto/evp.h 中
+
+EVP_PKEY
+============
+
+该结构用来存放非对称密钥信息,可以是 RSA、DSA、DH 或 ECC 密钥。其中，`ptr` 用来存放密钥结构地址，`attributes` 堆栈用来存放密钥属性
+
+.. code-block:: cpp
+
+
+    /* 
+        openssl-1.1.1/crypto/include/internal/evp_int.h:395 
+    */
+
+    /*
+     * Type needs to be a bit field Sub-type needs to be for variations on the
+     * method, as in, can it do arbitrary encryption....
+     */
+    struct evp_pkey_st {
+        int type;
+        int save_type;
+        CRYPTO_REF_COUNT references;
+        const EVP_PKEY_ASN1_METHOD *ameth;
+        ENGINE *engine;
+        ENGINE *pmeth_engine; /* If not NULL public key ENGINE to use */
+        union {
+            void *ptr;
+    # ifndef OPENSSL_NO_RSA
+            struct rsa_st *rsa;     /* RSA */
+    # endif
+    # ifndef OPENSSL_NO_DSA
+            struct dsa_st *dsa;     /* DSA */
+    # endif
+    # ifndef OPENSSL_NO_DH
+            struct dh_st *dh;       /* DH */
+    # endif
+    # ifndef OPENSSL_NO_EC
+            struct ec_key_st *ec;   /* ECC */
+            ECX_KEY *ecx;           /* X25519, X448, Ed25519, Ed448 */
+    # endif
+        } pkey;
+        int save_parameters;
+        STACK_OF(X509_ATTRIBUTE) *attributes; /* [ 0 ] */
+        CRYPTO_RWLOCK *lock;
+    } /* EVP_PKEY */ ;
+
+
+    /* 
+        openssl-1.1.1/include/openssl/ossl_typ.h:93 
+    */
+    typedef struct evp_pkey_st EVP_PKEY;
+
+
+EVP_MD
+============
+
+
+该结构用来存放摘要算法信息、非对称算法类型以及各种计算函数。主要各项意义如 下:
+
+* type:  摘要类型，一般是摘要算法 NID;
+* pkey_type:  公钥类型，一般是签名算法 NID;
+* md_size:  摘要值大小，为字节数;
+* flags:  用于设置标记;
+* init:  摘要算法初始化函数;
+* update:  多次摘要函数;
+* final:  摘要完结函数;
+* copy:  摘要上下文结构复制函数;
+* cleanup:  清除摘要上下文函数;
+* sign:  签名函数，其中 key 为非对称密钥结构地址;
+* verify:  摘要函数，其中 key 为非对称密钥结构地址。
+
+openssl 对于各种摘要算法实现了上述结构，各个源码位于 cypto/evp 目录下，文件名 以 m_开头。Openssl 通过这些结构来封装了各个摘要相关的运算
+
+
+
+.. code-block:: cpp
+
+
+   /* 
+       openssl-1.1.1/crypto/include/internal/evp_int.h:115 
+   */
+
+    struct evp_md_st {
+        int type;
+        int pkey_type;
+        int md_size;
+        unsigned long flags;
+        int (*init) (EVP_MD_CTX *ctx);
+        int (*update) (EVP_MD_CTX *ctx, const void *data, size_t count);
+        int (*final) (EVP_MD_CTX *ctx, unsigned char *md);
+        int (*copy) (EVP_MD_CTX *to, const EVP_MD_CTX *from);
+        int (*cleanup) (EVP_MD_CTX *ctx);
+        int block_size;
+        int ctx_size;               /* how big does the ctx->md_data need to be */
+        /* control function */
+        int (*md_ctrl) (EVP_MD_CTX *ctx, int cmd, int p1, void *p2);
+    } /* EVP_MD */ ;
+
+
+    /*
+        openssl-1.1.1/include/openssl/ossl_typ.h:91 
+    */
+    typedef struct evp_md_st EVP_MD;
+
+EVP_CIPHER
+===========
+
+该结构用来存放对称加密相关的信息以及算法。主要各项意义如下: 
+
+* nid: 对称算法 nid;
+* block_size: 对称算法每次加解密的字节数; 
+* key_len: 对称算法的密钥长度字节数; 
+* iv_len: 对称算法的填充长度;
+* flags:  用于标记;
+* init: 加密初始化函数，用来初始化 ctx，key 为对称密钥值，iv 为初始化向量，enc 用于指明是要加密还是解密，这些信息存放在 ctx 中; 
+* do_cipher: 对称运算函数，用于加密或解密;
+* cleanup: 清除上下文函数;
+* set_asn1_parameters: 设置上下文参数函数; 
+* get_asn1_parameters: 获取上下文参数函数;
+* ctrl: 控制函数;
+* app_data: 用于存放应用数据。
+
+openssl 对于各种对称算法实现了上述结构，各个源码位于 cypto/evp 目录下，文件名 以 e_开头。Openssl 通过这些结构来封装了对称算法相关的运算。
+
+
+
+.. code-block:: cpp
+
+    /* 
+        openssl-1.1.1/crypto/include/internal/evp_int.h:131 
+    */
+
+    struct evp_cipher_st {
+        int nid;
+        int block_size;
+        /* Default value for variable length ciphers */
+        int key_len;
+        int iv_len;
+        /* Various flags */
+        unsigned long flags;
+        /* init key */
+        int (*init) (EVP_CIPHER_CTX *ctx, const unsigned char *key,
+                     const unsigned char *iv, int enc);
+        /* encrypt/decrypt data */
+        int (*do_cipher) (EVP_CIPHER_CTX *ctx, unsigned char *out,
+                          const unsigned char *in, size_t inl);
+        /* cleanup ctx */
+        int (*cleanup) (EVP_CIPHER_CTX *);
+        /* how big ctx->cipher_data needs to be */
+        int ctx_size;
+        /* Populate a ASN1_TYPE with parameters */
+        int (*set_asn1_parameters) (EVP_CIPHER_CTX *, ASN1_TYPE *);
+        /* Get parameters from a ASN1_TYPE */
+        int (*get_asn1_parameters) (EVP_CIPHER_CTX *, ASN1_TYPE *);
+        /* Miscellaneous operations */
+        int (*ctrl) (EVP_CIPHER_CTX *, int type, int arg, void *ptr);
+        /* Application data */
+        void *app_data;
+    } /* EVP_CIPHER */ ;
+
+    
+    /* 
+        openssl-1.1.1/include/openssl/ossl_typ.h:89
+    */
+    typedef struct evp_cipher_st EVP_CIPHER;
+
+
+EVP_CIPHER_CTX
+=================
+
+
+对称算法上下文结构
+    此结构主要用来维护加解密状态，存放中间以及最后结果。因 为加密或解密时，当数据很多时，可能会用到 Update 函数，并且每次加密或解密的 输入数据长度任意的，并不一定是对称算法 block_size 的整数倍，所以需要用该结构 来存放中间未加密的数据。主要项意义如下:
+
+* cipher:  指明对称算法;
+* engine:  硬件引擎;
+* encrypt:  是加密还是解密;非 0 为加密，0 为解密;
+* buf 和 buf_len:  指明还有多少数据未进行运算;
+* oiv:  原始初始化向量;
+* iv:  当前的初始化向量;
+* final:  存放最终结果，一般与 Final 函数对应。
+
+
+.. code-block:: cpp
+
+    /*
+    openssl-1.1.1/crypto/evp/evp_locl.h:24
+    */
+
+    struct evp_cipher_ctx_st {
+        const EVP_CIPHER *cipher;
+        ENGINE *engine;             /* functional reference if 'cipher' is
+                                     * ENGINE-provided */
+        int encrypt;                /* encrypt or decrypt */
+        int buf_len;                /* number we have left */
+        unsigned char oiv[EVP_MAX_IV_LENGTH]; /* original iv */
+        unsigned char iv[EVP_MAX_IV_LENGTH]; /* working iv */
+        unsigned char buf[EVP_MAX_BLOCK_LENGTH]; /* saved partial block */
+        int num;                    /* used by cfb/ofb/ctr mode */
+        /* FIXME: Should this even exist? It appears unused */
+        void *app_data;             /* application stuff */
+        int key_len;                /* May change for variable length cipher */
+        unsigned long flags;        /* Various flags */
+        void *cipher_data;          /* per EVP data */
+        int final_used;
+        int block_mask;
+        unsigned char final[EVP_MAX_BLOCK_LENGTH]; /* possible final block */
+    } /* EVP_CIPHER_CTX */ ;
+
+
+    /*
+    openssl-1.1.1/include/openssl/ossl_typ.h:90
+    */
+    typedef struct evp_cipher_ctx_st EVP_CIPHER_CTX;
+
+
+*************
+21.3 源码结构
+*************
+
+
+evp 源码位于 crypto/evp 目录，可以分为如下几类: 
+
+1) 全局函数
+    主要包括 c_allc.c、c_alld.c、c_all.c 以及 names.c。他们加载 openssl 支持的所 有的对称算法和摘要算法，放入到哈希表中。实现了 OpenSSL_add_all_digests、 OpenSSL_add_all_ciphers 以及 OpenSSL_add_all_algorithms(调用了前两个函数)函 数。在进行计算时，用户也可以单独加载摘要函数(EVP_add_digest)和对称计算 函数(EVP_add_cipher)。
+
+2) BIO 扩充
+    包括 bio_b64.c、bio_enc.c、bio_md.c 和 bio_ok.c，各自实现了BIO_METHOD法，分别用于 base64 编解码、对称加解密以及摘要。 
+
+3) 摘要算法EVP封装
+    由 digest.c 实现，实现过程中调用了对应摘要算法的回调函数。各个摘要算法 提供了自己的 EVP_MD 静态结构，对应源码为 m_xxx.c。
+
+4) 对称算法 EVP 封装
+     由 evp_enc.c 实现，实现过程调用了具体对称算法函数，实现了 Update 操作。 各种对称算法都提供了一个 EVP_CIPHER 静态结构，对应源码为 e_xxx.c。需要注 意的是，e_xxx.c 中不提供完整的加解密运算，它只提供基本的对于一个 block_size 数据的计算，完整的计算由 evp_enc.c 来实现。当用户想添加一个自己的对称算法 时，可以参考 e_xxx.c 的实现方式。一般用户至少需要实现如下功能:
+
+        * 构造一个新的静态的EVP_CIPHER结构;
+        * 实现EVP_CIPHER结构中的init函数，该函数用于设置iv，设置加解密标
+        *       记、以及根据外送密钥生成自己的内部密钥;
+        * 实现do_cipher函数，该函数仅对block_size字节的数据进行对称运算;
+        * 实现cleanup函数，该函数主要用于清除内存中的密钥信息。
+
+5) 非对称算法EVP封装
+    主要是以 p_开头的文件。其中，p_enc.c 封装了公钥加密;p_dec.c 封装了私钥解密;p_lib.c 实现一些辅助函数;p_sign.c 封装了签名函数;p_verify.c 封装了验签函数;p_seal.c 封装了数字信封;p_open.c 封装了解数字信封。 
+
+6) 基于口令的加密
+    包括 p5_crpt2.c、p5_crpt.c 和 evp_pbe.c。
+
+
+************************
+21.4 摘要函数 
+************************
+
+查看帮助 : main EVP_md5
+
+典型的摘要函数主要有:
+
+:: 
+
+    1) EVP_md5
+        返回 md5 的 EVP_MD。
+
+    2) EVP_sha1
+        返回 sha1 的 EVP_MD。
+
+    3) EVP_sha256
+        返回 sha256 的 EVP_MD。
+
+    4) EVP_DigestInit
+        摘要初使化函数，需要有 EVP_MD 作为输入参数。
+
+    5) EVP_DigestUpdate 和 EVP_DigestInit_ex
+        摘要 Update 函数，用于进行多次摘要。
+
+    6) EVP_DigestFinal 和 EVP_DigestFinal_ex
+        摘要 Final 函数，用户得到最终结果。
+
+    7) EVP_Digest
+        对一个数据进行摘要，它依次调用了上述三个函数。
+
+*******************
+21.5 对称加解密函数
+*******************
+
+典型的加解密函数主要有:
+
+查看帮助 : main  EVP_CIPHER_CTX_init
+
+::
+
+    1) EVP_CIPHER_CTX_init
+        初始化对称计算上下文。
+
+    2) EVP_CIPHER_CTX_cleanup
+        清除对称算法上下文数据，它调用用户提供的销毁函数销清除存中的内部密钥 以及其他数据。
+
+    3) EVP_des_ede3_ecb 
+        返回一个 EVP_CIPHER;
+
+    4) EVP_EncryptInit 和 EVP_EncryptInit_ex
+        加密初始化函数，本函数调用具体算法的 init 回调函数，将外送密钥 key 转换为内部密钥形式，将初始化向量 iv 拷贝到 ctx 结构中。
+
+    5) EVP_EncryptUpdate
+        加密函数，用于多次计算，它调用了具体算法的 do_cipher 回调函数。
+
+    6) EVP_EncryptFinal 和 EVP_EncryptFinal_ex
+        获取加密结果，函数可能涉及填充，它调用了具体算法的 do_cipher 回调函数。
+
+    7) EVP_DecryptInit 和 EVP_DecryptInit_ex
+        解密初始化函数。
+
+    8) EVP_DecryptUpdate
+        解密函数，用于多次计算，它调用了具体算法的 do_cipher 回调函数。
+
+    9) EVP_DecryptFinal 和 EVP_DecryptFinal_ex
+        获取解密结果，函数可能涉及去填充，它调用了具体算法的 do_cipher 回调函数。
+
+    10) EVP_BytesToKey
+        计算密钥函数，它根据算法类型、摘要算法、salt 以及输入数据计算出一个对称密钥和初始化向量iv.
+
+    11) PKCS5_PBE_keyivgen 和 PKCS5_v2_PBE_keyivgen 
+        实现了 PKCS5 基于口令生成密钥和初始化向量的算法。
+
+    12) PKCS5_PBE_add
+        加载所有 openssl 实现的基于口令生成密钥的算法。
+
+    13) EVP_PBE_alg_add 
+        添加一个 PBE 算法。
+
+
+
+
