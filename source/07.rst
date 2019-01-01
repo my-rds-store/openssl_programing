@@ -1,0 +1,204 @@
+#################
+第7章 抽象IO
+#################
+
+************************
+7.1 openssl 抽象 IO
+************************
+
+openssl 抽象 IO(I/O abstraction，即 BIO)是 openssl 对于 io 类型的抽象封装，包括:内存、 文件、日志、标准输入输出、socket(TCP/UDP)、加/解密、摘要和 ssl 通道等。Openssl BIO 通过回调函数为用户隐藏了底层实现细节，所有类型的 bio 的调用大体上是类似的。Bio 中的数据能从一个 BIO 传送到另外一个 BIO 或者是应用程序。
+
+
+************************
+7.2 数据结构
+************************
+
+BIO 数据结构主要有 2 个，在 crypto/bio.h 中定义如下: 
+
+* 1) BIO_METHOD
+
+.. code:: c
+
+    typedef struct bio_method_st {
+            int type;
+            const char *name;
+            int (*bwrite)(BIO *, const char *, int); 
+            int (*bread)(BIO *, char *, int);
+            int (*bputs)(BIO *, const char *);
+            int (*bgets)(BIO *, char *, int);
+            long (*ctrl)(BIO *, int, long, void *);
+            int  (*create)(BIO *);
+            int  (*destroy)(BIO *);
+            long (*callback_ctrl)(BIO *, int, bio_info_cb *);
+    } BIO_METHOD;
+
+该结构定义了 IO 操作的各种回调函数，根据需要，具体的 bio 类型必须实现其中的一种或多种回调函数，各项意义如下:
+
+:: 
+
+    type:    具体 BIO 类型;
+    name:    具体 BIO 的名字;
+    bwrite:  具体 BIO 写操作回调函数;
+    bread:   具体 BIO 读操作回调函数;
+    bputs:   具体 BIO 中写入字符串回调函数;
+    bgets:   具体 BIO 中读取字符串函数;
+    ctrl:    具体 BIO 的控制回调函数;
+    create:  生成具体 BIO 回调函数;
+    destroy: 销毁具体 BIO 回调函数;
+    callback_ctrl: 具体 BIO 控制回调函数,与 ctrl 回调函数不一样,
+                   该函数可由调用者(而不是实现者)来实现,然后通过 
+                   BIO_set_callback 等函数来设置。
+
+* 2) BIO
+
+
+.. code:: c
+
+    truct bio_st {
+        BIO_METHOD *method;
+        /* bio, mode, argp, argi, argl, ret */
+        long (*callback)(struct bio_st *,int,const char *,int, long,long); 
+        char *cb_arg;   /* first argument for the callback */
+        int  init;
+        int  shutdown;
+        int  flags;      /* extra storage */
+        int  retry_reason;
+        int  num;
+        void *ptr;
+        structbio_st *next_bio;   /*usedbyfilterBIOs*/
+        struct bio_st *prev_bio; /* used by filter BIOs */
+        int references;
+        nsigned long  num_read;
+        unsigned long num_write;
+        CRYPTO_EX_DATA ex_data;
+    };
+
+    /* 
+    主要项含义:
+
+    init:   具体句柄初始化标记，初始化后为1。
+            比如:文件 BIO 中,通过 BIO_set_fp 关联一个文件指针时，该标记则置 1 ;
+                 socket BIO中,通过 BIO_set_fd 关联一个链接时,设置该标记为 1。
+
+    shutdown: BIO 关闭标记，当该值不为 0 时，释放资源; 该值可以通过控制函 数来设置。
+
+    flags:  有些 BIO 实现需要它来控制各个函数的行为。
+            比如文件 BIO 默认该值为 BIO_FLAGS_UPLINK，
+            这时文件读操作调用UP_fread 函数而不是调用fread 函数。
+
+    retry_reason: 重试原因,主要用在 socket 和 ssl BIO 的异步阻塞。
+                  比如 socket bio 中，遇到 WSAEWOULDBLOCK 错误时，
+                  openssl 告诉用户的操作需要重试。
+
+    num:  该值因具体 BIO 而异，比如 socket BIO 中 num 用来存放链接字。
+
+    ptr:  指针,体 bio 有不同含义。比如:
+               文件 BIO 中它用来存放文件句柄; 
+               mem BIO 中它用来存放内存地址;
+               connect BIO 中它用来存放 BIO_CONNECT 数据，
+               accept BIO 中它用来存放 BIO_ACCEPT 数据。
+
+    next_bio: 下一个 BIO 地址，BIO 数据可以从一个BIO传送到另一个BIO，
+              该值指明了下一个 BIO 的地址。
+
+    references: 被引用数量。
+    num_read:   BIO 中已读取的字节数。 
+    num_write:  BIO 中已写入的字节数。 
+    ex_data:    用于存放额外数据。
+    */
+
+
+****************
+7.3 BIO 函数
+****************
+
+::
+
+    BIO 各个函数定义在 crypto/bio.h 中。所有的函数都由 BIO_METHOD 中的回调函 数来实现。函数主要分为几类:
+
+    1) 具体BIO相关函数
+       比如:BIO_new_file(生成新文件)和 BIO_get_fd(设置网络链接)等。
+
+    2) 通用抽象函数
+       比如 BIO_read 和 BIO_write 等。
+
+    另外,有很多函数是由宏定义通过控制函数 BIO_ctrl 实现，
+    比如 BIO_set_nbio、BIO_get_fd 和 BIO_eof 等等。
+
+******************
+7.4 编程示例
+******************
+
+7.4.1 mem BIO
+================
+
+.. literalinclude:: ./code/7/4/1/main.c
+   :language: cpp
+
+::
+        
+    说明:
+        b=BIO_new(BIO_s_mem());         生成一个mem 类型的BIO。 
+        len=BIO_write(b,"openssl",7);   将字符串"openssl"写入 bio。 
+        len=BIO_printf(b,"bio test",8); 将字符串"bio test"写入 bio。 
+        len=BIO_ctrl_pending(b); 得到缓冲区中待读取大小。 
+        len=BIO_read(b,out,50);  将bio中的内容写入out缓冲区。
+
+7.4.2 file bio
+================
+
+.. literalinclude:: ./code/7/4/2/main.c
+   :language: cpp
+
+
+
+7.4.3 socket BIO
+=================
+
+( 待补充 ）
+
+
+7.4.4 md BIO
+================
+
+.. literalinclude:: ./code/7/4/4/main.c
+   :language: cpp
+
+::
+
+    说明: 本示例用 md BIO 对字符串"opessl"进行 md5 摘要。 
+          bmd=BIO_new(BIO_f_md());生成一个 md BIO。 
+          BIO_set_md(bmd,md); 设置 md BIO 为 md5 BIO。
+          b= BIO_new(BIO_s_null()); 生成一个 null BIO。 
+          b=BIO_push(bmd,b); 构造BIO 链,md5 BIO 在顶部。 
+          len=BIO_write(b,"openssl",7); 将字符串送入 BIO 做摘要。 
+          len=BIO_gets(b,tmp,1024); 将摘要结果写入 tmp 缓冲区
+
+7.4.5  cipher BIO
+==================
+
+.. literalinclude:: ./code/7/4/5/main.c
+   :language: cpp
+
+
+::
+
+    说明:本示例采用 cipher BIO 对字符串"openssl"进行加密和解密;
+    关键说明: 
+            BIO_set_cipher(bc,c,key,iv,1);设置加密 BI。 
+            BIO_set_cipher(bdec,cd,key,iv,0);设置解密 BIO。 
+    其中 key 为对称密钥,iv 为初始化向量。 加/解密结果通过 BIO_read 获取。
+
+
+7.4.6 SSl BIO
+================
+
+( 待补充 ）
+
+::
+
+    本函数用 ssl bio 来链接 mybank.icbc.com.cn 的 https 服务，并请求首页文件。
+    其中 SSLeay_add_ssl_algorithms 和 OpenSSL_add_all_algorithms 函数必不可少，否则不能找到 
+    ssl 加密套件并且不能找到各种算法。
+
+

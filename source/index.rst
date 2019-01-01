@@ -12,6 +12,7 @@ openssl 编程
    :maxdepth: 2
    :caption: Contents:
 
+   07.rst
    11.rst
    20.rst
    21.rst
@@ -37,6 +38,19 @@ openssl 编程
     Gy=BC3736A2 F4F6779C 59BDCEE3 6B692153 D0A9877C C62A4740 02DF32E5 2139F0A0
 
 
+* `国密SM2算法 <http://8btc.com/thread-217435-1-1.html>`_
+* `国家标准全文公开系统 - sm2 <http://www.gb688.cn/bzgk/gb/std_list?p.p1=0&p.p90=circulation_date&p.p91=desc&p.p2=32918>`_
+* `密码行业标准化技术委员会 <http://www.gmbz.org.cn/main/bzlb.html>`_
+
+::
+
+    《GBT 32918.1-2016 SM2椭圆曲线公钥密码算法 第1部分：总则》，第四章节提到椭圆曲线上点的压缩与解压缩。
+       这样SM2的公钥将可以占用更少的字节数。
+    《GMT 0009-2012 SM2密码算法使用规范》对SM2PublicKey做出规定，
+       使用非压缩方式，Bit String类型，内容是04||X||Y。
+
+    $ gmssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:sm2p256v1 -out private.pem
+    $ gmssl pkey -pubout -in private.pem -out public.pem
 
 其他
 -------
@@ -45,6 +59,61 @@ openssl 编程
 
 * `OpenSSL 1.1.1 新特性: 全面支持国密SM2/SM3/SM4加密算法 <https://www.jianshu.com/p/a1c3ee349345>`_
 
+
+
+待整理 
+---------
+
+* `OpenSSL 中文手册 之 OpenSSL 简介 <https://blog.csdn.net/xiyuan1999/article/month/2011/05/2>`_
+
+* SM2
+    * `椭圆曲线密码学在OpenSSL中的实现 <https://solobearchn.github.io/2018/03/18/ECC/>`_
+    * `小王的尴尬日常（二）---Openssl 实现国密算法(基础介绍和产生秘钥对) <https://blog.csdn.net/I_can_do_1098/article/details/59117569>`_
+
+    * `通过openssl生成sm2的公私钥的方法 <https://blog.csdn.net/dong_beijing/article/details/81365060>`_
+    * `在openssl中对SM2的公私钥进行加解密的验证 <https://blog.csdn.net/dong_beijing/article/details/81390710>`_
+
+* BIO
+  * `OpenSSL中文手册之BIO库详解 <https://blog.csdn.net/liao20081228/article/details/77193729>`_
+  * `Openssl之BIO系列 <https://blog.csdn.net/zhangzq86/article/details/50786513>`_
+  * `openssl之BIO系列(01-25)(带目录) <https://wenku.baidu.com/view/2f9df64d2e3f5727a5e962a8.html>`_
+
+
+* BIGNUM
+    * `Openssl中的BIGNUM运算函数(整理) <https://blog.csdn.net/jnxxhzz/article/details/81235981>`_
+
+
+* EVP
+    * `openssl之EVP系列 <http://www.newsmth.net/bbs0an.php?path=%2Fgroups%2Fcomp.faq%2FSecurity%2Fsecuritydocs%2Fopenssl%2Fopenssl_evp>`_
+
+* PEM
+    * `openssl之PEM系列 <http://www.newsmth.net/bbs0an.php?path=%2Fgroups%2Fcomp.faq%2FSecurity%2Fsecuritydocs%2Fopenssl%2Fopenssl_pem>`_
+
+
+.. code:: sh
+
+    # sm2 test
+    cd /home/vagrant/encode_src/src/openssl-1.1.1/test/
+    bash sm2_build.sh
+
+    # gmssl
+    export LD_LIBRARY_PATH='/home/vagrant/usr/lib'
+    export PKG_CONFIG_PATH='/home/vagrant/usr/lib/pkgconfig'
+    cd /mnt/workspace/GmSSL/test
+    ./sm2test
+
+------
+
+* `中国银联PIN算法标准 <https://max.book118.com/html/2017/0406/99012119.shtm>`_
+* `银联卡中关于CVN/CVN2/ICVN的区别 <https://blog.csdn.net/chong89125/article/details/72918140/>`_
+
+::
+
+    openssl site:http://www.newsmth.net
+
+------
+
+* `Download Win32 OpenSSL <https://slproweb.com/products/Win32OpenSSL.html>`_
 
 Indices and tables
 ==================
