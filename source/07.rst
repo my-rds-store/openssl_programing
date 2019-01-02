@@ -6,7 +6,42 @@
 7.1 openssl 抽象 IO
 ************************
 
-openssl 抽象 IO(I/O abstraction，即 BIO)是 openssl 对于 io 类型的抽象封装，包括:内存、 文件、日志、标准输入输出、socket(TCP/UDP)、加/解密、摘要和 ssl 通道等。Openssl BIO 通过回调函数为用户隐藏了底层实现细节，所有类型的 bio 的调用大体上是类似的。Bio 中的数据能从一个 BIO 传送到另外一个 BIO 或者是应用程序。
+::
+
+    openssl 抽象 IO(I/O abstraction，即 BIO)是 openssl 对于 io 类型的抽象封装,
+    包括:内存、 文件、日志、标准输入输出、socket(TCP/UDP)、加/解密、摘要和 ssl 通道等。
+    Openssl BIO 通过回调函数为用户隐藏了底层实现细节，所有类型的 bio 的调用大体上是类似的。
+    Bio 中的数据能从一个 BIO 传送到另外一个 BIO 或者是应用程序。
+
+    其实包含了很多种接口，用通用的函数接口，主要控制在BIO_METHOD中的不同实现函数控制，
+    包括6种filter型和8种source/sink型。 
+
+    source/sink类型的BIO是数据源，
+    例如，sokect BIO 和 文件BIO。 
+    而filter BIO就是把数据从一个BIO转换到另外一个BIO或应用接口,
+    在转换过程中,些数据可以不修改（如信息摘要BIO)，也可以进行转换.
+    例如在加密BIO中，如果写操作，数据就会被加密，如果是读操作，数据就会被解密。 
+
+    BIO是封装了许多类型I/O接口细节的一种应用接口,
+    可以和SSL连接、 非加密的网络连接以及文件IO进行透明的连接。 
+    BIO可以连接在一起成为一个BIO链（单个的BIO就是一个环节的BIO链的特例）,
+
+    如下是BIO的结构定义，可以看到它有上下环节。 
+
+    一个BIO链通常包括一个source BIO和一个或多个filter BIO，数据从第一个BIO读出或写入,
+    然后经过一系列BIO变化到输出（通常是一个source/sink BIO）。
+
+    BIO目录文件的简要说明:
+
+      bio.h：    主定义的头文件，包括了很多通用的宏的定义。
+      bio_lib.c: 主要的BIO操作定义文件，是比较上层的函数了。
+      bss_*系列：是soruce/sink型BIO具体的操作实现文件
+      bf_*系列： 是filter型BIO具体的操作实现文件
+      bio_err.c: 是错误信息处理文件
+      bio_cb.c： 是callback函数的相关文件
+      b_print.c: 是信息输出的处理函数文件
+      b_socket.c: 是Socket连接的一些相关信息处理文件
+      b_dump.c:  是对内存内容的存储操作处理
 
 
 ************************
@@ -108,9 +143,44 @@ BIO 数据结构主要有 2 个，在 crypto/bio.h 中定义如下:
     */
 
 
+
+    typedef struct bio_st BIO;
+
+    struct bio_st
+    {
+         BIO_METHOD *method; //BIO方法结构，是决定BIO类型和行为的重要参数,各种BIO的不同之处主要也正在于此项。
+
+         long (*callback)(struct bio_st *,int,const char *,int, long,long); //BIO回调函数
+         char *cb_arg;                                                      //回调函数的第一个参量
+
+         int init;         //初始化标志，初始化了为1，否则为0。比如文件BIO 中，通过BIO_set_fp
+                           //关联一个文件指针时，该标记则置1。
+         int shutdown;     //BIO开关标志，如果为BIO_CLOSE，则释放BIO时自动释放持有的资源，否则不自动释放持有资源
+         int flags;        //有些BIO 实现需要它来控制各个函数的行为。比如文件BIO 默认该值为BIO_FLAGS_UPLINK，
+                           //这时文件读操作调用UP_fread 函数而不是调用fread 函数。
+         int retry_reason; //重试原因，主要用在socket 和ssl BIO 的异步阻塞。比如socketbio 中，遇到
+                           //WSAEWOULDBLOCK 错误时，openssl 告诉用户的操作需要重试
+         int num;          //该值因具体BIO 而异，比如socket BIO 中num 用来存放链接字。
+         void *ptr;        //ptr：指针，具体bio 有不同含义。比如文件BIO中它用来存放文件句柄；mem bio 中它用来存放
+                           //内存地址；connect bio 中它用来存放BIO_CONNECT 数据，acceptbio 中它
+                           //用来存放BIO_ACCEPT数据。
+
+         struct bio_st *next_bio; //BIO链中下一个BIO 地址，BIO 数据可以从一个BIO 传送到另一个BIO。
+         struct bio_st *prev_bio; //BIO链中上一个BIO 地址，
+
+         int references;          //引用计数
+         unsigned long num_read;  //已读出的数据长度
+         unsigned long num_write; //已写入的数据长度
+
+         CRYPTO_EX_DATA ex_data;  //额外数据
+    };
+
+
 ****************
 7.3 BIO 函数
 ****************
+
+
 
 ::
 
@@ -124,6 +194,47 @@ BIO 数据结构主要有 2 个，在 crypto/bio.h 中定义如下:
 
     另外,有很多函数是由宏定义通过控制函数 BIO_ctrl 实现，
     比如 BIO_set_nbio、BIO_get_fd 和 BIO_eof 等等。
+
+
+    在BIO的所用成员中，method可以说是最关键的一个成员，它决定了BIO的类型，
+    可以看到，在定义一个新的BIO结构时，总是使用下面的函数：
+
+    BIO* BIO_new(BIO_METHOD *type);
+
+    在源代码可以看出，BIO_new函数除了给一些初始变量赋值外，
+    主要就是把type中的各个变量赋值给BIO结构中的method成员。 
+    一般来说，上述type参数是以一个返回值为BIO_METHOD类型的函数提供的，
+    如生成一个mem型的BIO结构，就使用下面的语句：
+
+    BIO *mem = BIO_new(BIO_s_mem());
+
+.. code:: cpp
+
+    // 【source/sink型】
+    BIO_METHOD* BIO_s_accept()   //一个封装了类似TCP/IP socket Accept规则的接口，并且使TCP/IP操作对于BIO接口透明。
+    BIO_METHOD* BIO_s_connect()  //一个封装了类似TCP/IP socket Connect规则的接口，并且使TCP/IP操作对于BIO接口透明
+    BIO_METHOD* BIO_s_socket()   //封装了socket接口的BIO类型
+
+    BIO_METHOD* BIO_s_bio()      //封装了一个BIO对，数据从其中一个BIO写入，从另外一个BIO读出
+
+    BIO_METHOD* BIO_s_fd()       //是一个封装了文件描述符的BIO接口，提供类似文件读写操作的功能
+    BIO_METHOD* BIO_s_file()     //封装了标准的文件接口的BIO，包括标准的输入输出设备如stdin等
+    BIO_METHOD* BIO_s_mem()      //封装了内存操作的BIO接口，包括了对内存的读写操作
+    BIO_METHOD* BIO_s_null()     //返回空的sink型BIO接口，写入这种接口的所有数据读被丢弃，读的时候总是返回EOF
+
+    //【filter型】
+    BIO_METHOD* BIO_f_base64()   //封装了base64编码方法的BIO,写的时候进行编码，读的时候解码                                                         
+    BIO_METHOD* BIO_f_cipher()   //封装了加解密方法的BIO，写的时候加密，读的时候解密
+    BIO_METHOD* BIO_f_md()       //封装了信息摘要方法的BIO，通过该接口读写的数据都是已经经过摘要的。
+    BIO_METHOD* BIO_f_ssl()      //封装了openssl 的SSL协议的BIO类型，也就是为SSL协议增加了一些BIO操作方法。
+
+    BIO_METHOD* BIO_f_null()     //一个不作任何事情的BIO，对它的操作都简单传到下一个BIO去了，相当于不存在。
+
+    BIO_METHOD* BIO_f_buffer()   //封装了缓冲区操作的BIO，写入该接口的数据一般是准备传入下一个BIO接口的，从该——
+                                 //接口读出的数据一般也是从另一个BIO传过来的
+
+
+
 
 ******************
 7.4 编程示例

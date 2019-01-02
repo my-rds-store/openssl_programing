@@ -2,14 +2,164 @@
 11 大数
 ########
 
-* `BN_zero <https://www.openssl.org/docs/man1.1.0/crypto/BN_zero.html>`_
 
+**************
+11.1   介绍
+**************
+
+  大数一般指的是位数很多的数。
+  计算机表示的数的大小是有限的，精度也是有限的，它不能支持大数运算。
+  密码学中采用了很多大数计算，为了让计算机实现大数运算，用户需要定义自己的大数表示方式并及实现各种大数运算。
+  Openssl为我们提供了这些功能，主要用于非对称算法。
+
+
+****************************
+11.2   openssl大数表示
+****************************
+
+  crypto/bn.h中定义了大数的表示方式，如下：
+
+  .. code:: cpp
+
+        struct bignum_st
+        {
+               BN_ULONG *d;
+               int top;   
+               int dmax;
+               int neg;
+               int flags;
+        };
+
+        /*
+        各项意义如下：
+          d   ：BN_ULONG(应系统而异，win32下为4个字节)数组指针首地址，
+                大数就存放在这里面，不过是倒放的。
+                比如，用户要存放的大数为 12345678000（通过BN_bin2bn放入）,
+                则 d 的内容如下：
+                     0x30 0x30 0x30 0x38 0x37 0x36 0x35 0x34 0x33 0x32 0x31 ;
+
+          top ：用来指明大数占多少个BN_ULONG空间，上例中top为3。
+          dmax：d数组的大小。
+          neg ：是否为负数， 如果 为1，则是负数，为0，则为正数。
+          flags：用于存放一些标记， 
+                 比如flags
+                   含有 BN_FLG_STATIC_DATA 时, d 的内存是静态分配的；
+                   含有 BN_FLG_MALLOCED    时，d 的内存是动态分配的。
+        */
+
+
+
+****************************
+11.3   大数函数
+****************************
+
+::
+
+    大数函数一般都能根据函数名字知道其实现的功能。下面简单介绍了几个函数。
+
+    1） BN_rand/BN_pseudo_rand
+        生成一个随机的大数。
+    2） BN_rand_range/BN_pseudo_rand_range
+        生成随机数，但是给出了随机数的范围。
+    3） BN_dup
+        大数复制。
+    4)  BN_generate_prime
+        生成素数。
+    5） int BN_add_word(BIGNUM *a, BN_ULONG w)
+        给大数a加上w，如果成功，返回1。
+
+    6)  BIGNUM *BN_bin2bn(const unsigned char *s, int len, BIGNUM *ret)
+        将内存中的数据转换为大数，为内存地址，len为数据长度，ret为返回值。
+
+    7) int BN_bn2bin(const BIGNUM *a, unsigned char *to)
+       将大数转换为内存形式。输入参数为大数a，to为输出缓冲区地址，缓冲区需要预先分配，
+       返回值为缓冲区的长度。
+    8) char *BN_bn2dec(const BIGNUM *a)
+       将大数转换成整数字符串。返回值中存放整数字符串，它由内部分配空间，
+       用户必须在外部用OPENSSL_free函数释放该空间。
+
+    9) char *BN_bn2hex(const BIGNUM *a)
+       将大数转换为十六进制字符串。返回值为生成的十六进制字符串，
+       外部需要用OPENSSL_free函数释放
+
+    10)  BN_cmp
+           比较两个大数。
+    11）BIGNUM *BN_mod_inverse( BIGNUM *in,  
+                                const BIGNUM *a, 
+                                const BIGNUM *n, 
+                                BN_CTX *ctx)
+        计算ax=1(mod n)。
+
+    用户使用openssl函数编程时， 一般用不着进行大数运算。
+    BN_bin2bn、BN_hex2bn、BN_dec2bn、BN_bin2bn、BN_bn2bin、BN_bn2hex和BN_bn2dec比较常用。
+    比如给定RSA密钥的内存形式，用户可以调用BN_bin2bn来构造RSA密钥的大数元素来进行RSA运算，
+    或者已经生成了RSA密钥，用户调用BN_bn2bin将RSA各个元素导出到内存中再写入密钥文件。
+
+.. literalinclude:: ./code/11/3/a/main.c
+   :language: cpp
+
+
+.. literalinclude:: ./code/11/3/b/main.c
+   :language: cpp
+
+
+.. literalinclude:: ./code/11/3/c/main.c
+   :language: cpp
+
+
+.. literalinclude:: ./code/11/3/d/main.c
+   :language: cpp
+
+.. literalinclude:: ./code/11/3/e/main.c
+   :language: cpp
+
+**********************
+11.4   使用示例
+**********************
+
+* 示例1
+
+.. literalinclude:: ./code/11/4/1/main.c
+   :language: cpp
+
+* 示例2 : 加法运算
+
+.. literalinclude:: ./code/11/4/2/main.c
+   :language: cpp
+
+
+* 示例3 : 减法运算
+
+.. literalinclude:: ./code/11/4/3/main.c
+   :language: cpp
+
+
+* 示例4 : 乘法运算
+
+.. literalinclude:: ./code/11/4/4/main.c
+   :language: cpp
+
+
+* 示例5 : 除法运算
+
+.. literalinclude:: ./code/11/4/5/main.c
+   :language: cpp
+
+* 示例6 : 平方运算
+
+.. literalinclude:: ./code/11/4/6/main.c
+   :language: cpp
+
+* 示例7 : 次方运算
+
+.. literalinclude:: ./code/11/4/7/main.c
+   :language: cpp
 
 ::
 
     1．初始化函数
      
-      BIGNUM *BN_new(void);    新生成一个BIGNUM结构 
+      BIGNUM *BN_new(void);     新生成一个BIGNUM结构 
       void BN_free(BIGNUM *a);   释放一个BIGNUM结构，释放完后a=NULL; 
       void BN_init(BIGNUM *);    初始化所有项均为0，一般为BN_ init(&c) 
       void BN_clear(BIGNUM *a);  将a中所有项均赋值为0，但是内存并没有释放 
