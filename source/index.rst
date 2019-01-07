@@ -7,11 +7,13 @@ openssl 编程
 ==============================================
 
 * `OpenSSL 1.1.1 DOCS <https://www.openssl.org/docs/man1.1.1/>`_ 
+* `OPenSSL 1.0.1c Documentation  <https://docs.huihoo.com/doxygen/openssl/1.0.1c/index.html>`_
 
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
 
+   03.rst
    07.rst
    11.rst
    20.rst
@@ -67,8 +69,15 @@ openssl 编程
 * `OpenSSL 中文手册 之 OpenSSL 简介 <https://blog.csdn.net/xiyuan1999/article/month/2011/05/2>`_
 
 * SM2
-    * `椭圆曲线密码学在OpenSSL中的实现 <https://solobearchn.github.io/2018/03/18/ECC/>`_
+    * `小王的尴尬日常（一）--使用RSA公钥证书解密 <https://blog.csdn.net/I_can_do_1098/article/details/54583148>`_
     * `小王的尴尬日常（二）---Openssl 实现国密算法(基础介绍和产生秘钥对) <https://blog.csdn.net/I_can_do_1098/article/details/59117569>`_
+    * `小王的尴尬日常（三）--Openssl 实现国密算法 (加密和解密) <https://blog.csdn.net/I_can_do_1098/article/details/61919869>`_
+    * `小王的尴尬日常（四）--openssl 实现国密算法 (签名和验签) <https://blog.csdn.net/I_can_do_1098/article/details/62045985>`_
+    * `椭圆曲线加密系统之OpenSSL <http://www.jiamisoft.com/blog/16394-opensslqianrushieccquxianjiam.html>`_
+
+-----
+
+    * `椭圆曲线密码学在OpenSSL中的实现 <https://solobearchn.github.io/2018/03/18/ECC/>`_
 
     * `通过openssl生成sm2的公私钥的方法 <https://blog.csdn.net/dong_beijing/article/details/81365060>`_
     * `在openssl中对SM2的公私钥进行加解密的验证 <https://blog.csdn.net/dong_beijing/article/details/81390710>`_

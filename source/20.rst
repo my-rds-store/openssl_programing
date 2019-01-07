@@ -3,6 +3,54 @@
 ##############
 
 ****************************
+20.1 ECC介绍
+****************************
+
+::
+
+    椭圆曲线算法可以看作是定义在特殊集合下数的运算，满足一定的规则。
+    椭圆曲线在如 下两个域中定义:Fp 域和 F2m 域。
+
+    Fp 域，素数域，p 为素数;
+    F2m 域:特征为 2 的有限域，称之为二元域或者二进制扩展域。该域中，元素的个数为 2m 个。
+
+    椭圆曲线标准文档如下:
+    1) X9.62
+       Public Key Cryptography For The Financial Services Industry: The Elliptic Curve
+      Digital Signature Algorithm (ECDSA);
+    2) SEC1
+       SEC 1:Elliptic Curve Cryptography;
+    3) SEC2
+       SEC 2: Recommended Elliptic Curve Domain Parameters;
+    4) NIST
+       (U.S.) National Institute of Standards and Technology，美国国家标准。
+       这些标准一般都描述了 Fp 域和 F2m 域、椭圆曲线参数、数据转换、密钥生成以及
+       推荐了多种椭圆曲线。
+
+    一些术语说明:
+    1) 椭圆曲线的阶(order of a curve)
+       椭圆曲线所有点的个数，包括无穷远点;
+    2) 椭圆曲线上点的阶(order of a point)
+       P 为椭圆曲线上的点，nP=无穷远点，n 取最小整数，既是 P 的阶;
+    3) 基点(base point)
+       椭圆曲线参数之一，用 G 表示，是椭圆曲线上都一个点;
+    4) 余因子(cofactor)
+       椭圆曲线的余因子，用 h 表示，为椭圆曲线点的个数/基点的阶
+    5) 椭圆曲线参数:
+       素数域: 
+       (p，a，b，G，n，h)
+           其中，p 为素数，确定 Fp，a 和 b 确定椭圆曲线方程，G 为基点，
+           n 为 G 的阶， h 为余因子。
+       二进制扩展域: 
+       (m，f(x)，a，b，G，n，h)
+           其中，m 确定 F2m，f(x)为不可约多项式，a 和 b 用于确定椭圆曲线方程，G 为基点，
+           n 为 G 的阶， h 为余因子。
+
+    6) 椭圆曲线公钥和私钥 
+       椭圆曲线的私钥是一个随机整数，小于 n; 
+       椭圆曲线的公钥是椭圆曲线上的一个点: Q = 私钥 * G。
+
+****************************
 20.2 openssl的ECC实现
 ****************************
 
@@ -18,7 +66,8 @@
 
     1) 密钥数据结构
        主要是 公钥 和 私钥 数据结构。
-       椭圆曲线密钥数据结构如下，定义在crypto/ec_lcl.h中，对用户是透明的。
+
+       椭圆曲线密钥数据结构如下，定义在/crypto/ec/ec_lcl.h:272 中，对用户是透明的。
 
        struct ec_key_st {
              int        version;
@@ -27,6 +76,29 @@
              BIGNUM    *priv_key;
              /* 其他项 */
        }
+
+
+       EC_POINT据结构如下，定义在/crypto/ec/ec_lcl.h: 287 中，
+
+        
+        struct ec_point_st {
+            const EC_METHOD *meth;
+            /* NID for the curve if known */
+            int curve_name;
+            /*
+             * All members except 'meth' are handled by the method functions, even if
+             * they appear generic
+             */
+            BIGNUM *X;
+            BIGNUM *Y;
+            BIGNUM *Z;                  /* Jacobian projective coordinates: * (X, Y,
+                                         * Z) represents (X/Z^2, Y/Z^3) if Z != 0 */
+            int Z_is_one;               /* enable optimized point arithmetics for
+                                         * special case */
+        };
+    
+        include/openssl/ec.h:46
+        typedef struct ec_point_st EC_POINT;
 
     2) 密钥生成
        对照公钥和私钥的表示方法，非对称算法不同有各自的密钥生成过程。
@@ -79,6 +151,17 @@
                         BN_CTX *ctx )
 
        说明: 设置素数域椭圆曲线上点 point 的几何坐标;
+
+    ) int EC_POINT_set_affine_coordinates(const EC_GROUP *group, EC_POINT *p,
+                                            const BIGNUM *x, const BIGNUM *y,
+                                            BN_CTX *ctx);
+       说明：设置素数域椭圆曲线上点point的几何坐标；
+
+       The functions EC_POINT_set_affine_coordinates_GFp() and EC_POINT_set_affine_coordinates_GF2m() 
+       are synonyms for EC_POINT_set_affine_coordinates(). 
+        They are defined for backwards compatibility only and should not be used.
+
+
 
     3) int EC_POINT_set_compressed_coordinates_GF2m( 
                         const EC_GROUP *group, 
@@ -154,6 +237,27 @@
                                           const BIGNUM *b, 
                                           BN_CTX *ctx)
         说明: 生成素数域上的椭圆曲线。
+        
+
+    13) int EC_POINT_mul(const EC_GROUP *group, EC_POINT *r, const BIGNUM *n,
+                         const EC_POINT *q, const BIGNUM *m, BN_CTX *ctx);
+
+      点乘
+      EC_POINT_mul is a convenient interface to EC_POINTs_mul: it calculates the value generator * n + q * m and stores the result in r.  The
+      value n may be NULL in which case the result is just q * m (variable point multiplication). Alternatively, both q and m may be NULL, and n
+      non-NULL, in which case the result is just generator * n (fixed point multiplication).  When performing a single fixed or variable point
+      multiplication, the underlying implementation uses a constant time algorithm, when the input scalar (either n or m) is in the range [0,
+      ec_group_order).
+
+
+     14) int EC_POINTs_mul(const EC_GROUP *group, EC_POINT *r, const BIGNUM *n, size_t num,
+                           const EC_POINT *p[], const BIGNUM *m[], BN_CTX *ctx);
+
+      EC_POINTs_mul calculates the value generator * n + q[0] * m[0] + ... + q[num-1] * m[num-1]. As for EC_POINT_mul the value n may be NULL or
+      num may be zero.  When performing a fixed point multiplication (n is non-NULL and num is 0) or a variable point multiplication (n is NULL
+      and num is 1), the underlying implementation uses a constant time algorithm, when the input scalar (either n or m[0]) is in the range [0,
+      ec_group_order).
+
 
 20.3.2 参数获取
 ==================

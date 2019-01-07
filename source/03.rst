@@ -1,0 +1,73 @@
+#################
+3 堆栈
+#################
+
+
+* https://www.openssl.org/docs/man1.1.1/man3/sk_TYPE_num.html
+* https://blog.csdn.net/as3luyuan123/article/details/17081581
+
+.. code:: cpp
+
+    // 通用堆栈
+
+    //创建一个空栈，参数可指定排序方法，因为openssl不知道里面存放的是什么类型的数据，
+    // 所以排序方法需要用户实现，当参数为NULL，同下方法
+    OPENSSL_STACK *OPENSSL_sk_new(OPENSSL_sk_compfunc cmp);
+
+    //创建一个空栈，
+    OPENSSL_STACK *OPENSSL_sk_new_null(void);
+
+    //释放栈，并不释放栈内元素内存
+    void OPENSSL_sk_free(OPENSSL_STACK *);
+
+    //删除并释放所有栈内元素，最后释放栈，可以指定回调函数，栈每次释放一个元素都会回调该回调函数
+    void OPENSSL_sk_pop_free(OPENSSL_STACK *st, void (*func) (void *));
+
+    //栈深copy,
+    OPENSSL_STACK *OPENSSL_sk_deep_copy( const OPENSSL_STACK *, 
+                                         OPENSSL_sk_copyfunc c, 
+                                         OPENSSL_sk_freefunc f);
+
+    //在栈指定位置插入元素,成功返回该栈所有元素的个数
+    int OPENSSL_sk_insert(OPENSSL_STACK *sk, const void *data, int where);
+
+    //删除栈指定位置元素，成功返回删除的该元素
+    void *OPENSSL_sk_delete(OPENSSL_STACK *st, int loc);
+
+    //删除栈指定元素，成功返回删除的该元素
+    void *OPENSSL_sk_delete_ptr(OPENSSL_STACK *st, const void *p);
+
+    //在栈中查找指元素，成功返回该元素位置
+    int OPENSSL_sk_find(OPENSSL_STACK *st, const void *data);
+
+    //同上，
+    int OPENSSL_sk_find_ex(OPENSSL_STACK *st, const void *data);
+
+    //在栈顶添加一个元素，成功返回栈元素总数
+    int OPENSSL_sk_push(OPENSSL_STACK *st, const void *data);
+
+    //在栈位置0次添加一个元素，类似 insert(st,0);
+    int OPENSSL_sk_unshift(OPENSSL_STACK *st, const void *data);
+
+    //移出栈位置0处的元素，类似pop
+    void *OPENSSL_sk_shift(OPENSSL_STACK *st);
+
+    //在栈顶移出一个元素，并释放该元素内存，
+    void *OPENSSL_sk_pop(OPENSSL_STACK *st);
+
+    //设置栈元素为0，不释放栈
+    void OPENSSL_sk_zero(OPENSSL_STACK *st);
+
+    //设置栈的排序方法
+    OPENSSL_sk_compfunc OPENSSL_sk_set_cmp_func( OPENSSL_STACK *sk, 
+                                                 OPENSSL_sk_compfunc cmp);
+
+    //copy 栈
+    OPENSSL_STACK *OPENSSL_sk_dup(const OPENSSL_STACK *st);
+
+    //栈排序
+    void OPENSSL_sk_sort(OPENSSL_STACK *st);
+
+    //栈是否排序
+    int OPENSSL_sk_is_sorted(const OPENSSL_STACK *st);
+
