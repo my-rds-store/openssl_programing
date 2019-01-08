@@ -14,6 +14,9 @@ openssl 编程
    :caption: Contents:
 
    03.rst
+   04.rst
+   05.rst
+   06.rst
    07.rst
    11.rst
    20.rst

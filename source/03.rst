@@ -6,6 +6,24 @@
 * https://www.openssl.org/docs/man1.1.1/man3/sk_TYPE_num.html
 * https://blog.csdn.net/as3luyuan123/article/details/17081581
 
+*********************
+3.1    openssl堆栈
+*********************
+
+::
+
+    堆栈是一种先进后出的数据结构。 openssl大量采用堆栈来存放数据。
+    它实现了一个通用的堆栈，可以方便的存储任意数据。
+
+    它实现了许多基本的堆栈操作，主要有：
+        构建新堆栈（sk_new_null，sk_new）、
+        堆栈拷贝(sk_dup)、
+        插入数据（sk_insert）、 删除数据（sk_delete）、
+        查找数据（sk_find，sk_find_ex）、
+        入栈（sk_push）、 出栈（sk_pop）、
+        获取堆栈元素个数（sk_num）、 获取堆栈值（sk_value）、
+        设置堆栈值（sk_set）和堆栈排序（sk_sort）。
+
 .. code:: cpp
 
     // 通用堆栈
@@ -70,4 +88,95 @@
 
     //栈是否排序
     int OPENSSL_sk_is_sorted(const OPENSSL_STACK *st);
+
+******************
+3.2 数据结构
+******************
+
+::
+
+    openssl堆栈数据结构在stack.h中定义如下：
+    typedef struct stack_st
+    {
+           int num;
+           char **data;
+           int sorted;
+           int num_alloc;
+           int (*comp)(const char * const *, const char * const *);
+    } STACK;
+
+    各项意义如下：
+        num :    堆栈中存放数据的个数。
+        data :   用于存放数据地址，每个数据地址存放在data[0]到data[num-1]中。
+        sorted : 堆栈是否已排序，如果排序则值为1，否则为0，堆栈数据一般是无序的，
+                 只有当用户调用了sk_sort操作，其值才为1。
+        comp :   堆栈内存放数据的比较函数地址,此函数用于排序和查找操作；
+                 当用户生成一个新堆栈时,可以指定comp为用户实现的一个比较函数；
+                 或当堆栈已经存在时通过调用sk_set_cmp_func函数来重新指定比较函数。
+
+       注意，用户不需要调用底层的堆栈函数(sk_sort、sk_set_cmp_func等)，而是调用他通过宏实现的各个函数。
+
+******************
+3.3 源码
+******************
+
+:: 
+
+    openssl堆栈实现源码位于crypto/stack目录下。下面分析了部分函数。
+
+    1)  sk_set_cmp_func
+        此函数用于设置堆栈存放数据的比较函数。
+        由于堆栈不知道用户存放的是什么数据，
+        所以，比较函数必须由用户自己实现。
+
+    2)  sk_find
+        根据数据地址来查找它在堆栈中的位置。
+        当堆栈设置了比较函数时，它首先对堆栈进行排序，然后通过二分法进行查找。
+        如果堆栈没有设置比较函数，它只是简单的比较数据地址来查找.
+
+    3）sk_sort
+       本函数对堆栈数据排序。
+       它首先根据sorted来判断是否已经排序，
+       如果未排序则调用了标准C函数qsort进行快速排序。
+
+    4）sk_pop_free
+       本函数用于释放堆栈内存放的数据以及堆栈本身，
+       它需要一个由用户指定的针对具体数据的释放函数。
+       如果用户仅调用sk_free函数，则只会释放堆栈本身所用的内存，而不会释放数据内存。
+
+
+*******************************
+3.4 定义用户自己的堆栈
+*******************************
+
+.. code:: cpp
+
+    STACK_OF(TYPE)
+    DEFINE_STACK_OF(TYPE)
+    DEFINE_STACK_OF_CONST(TYPE)
+    DEFINE_SPECIAL_STACK_OF(FUNCTYPE, TYPE)
+    DEFINE_SPECIAL_STACK_OF_CONST(FUNCTYPE, TYPE)
+
+    /*
+      test/stack_test.c
+    */
+
+
+*******************************
+3.5 编程示例
+*******************************
+
+3.5.1 通用堆栈
+======================
+
+.. literalinclude:: ./code/3/1/main.c
+   :language: cpp
+
+
+3.5.2  自定义堆栈
+======================
+
+.. literalinclude:: ./code/3/2/main.c
+   :language: cpp
+
 
