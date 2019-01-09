@@ -1,0 +1,360 @@
+##############
+17 RSA
+##############
+
+***************
+17.1  RSA介绍
+***************
+
+::
+
+    RSA算法是一个广泛使用的公钥算法。
+    其密钥包括公钥和私钥。它能用于数字签名、身份认证以及密钥交换。
+    RSA密钥长度一般使用1024位或者更高。RSA密钥信息主要包括[1]：
+
+            n : 模数
+            e : 公钥指数
+            d : 私钥指数
+            p : 最初的大素数
+            q : 最初的大素数
+
+            dmp1 : e*dmp1 = 1 (mod (p-1))
+            dmq1 : e*dmq1 = 1 (mod (q-1))
+            iqmp : q*iqmp = 1 (mod p )
+
+    其中，公钥为n和e；私钥为n和d。
+    在实际应用中，公钥加密一般用来协商密钥；私钥加密一般用来签名。
+
+
+******************************
+17.2  openssl的RSA实现
+******************************
+
+::
+
+    Openssl的RSA实现源码在crypto/rsa目录下。它实现了RSA PKCS1标准。主要源码如下：
+
+    1)  rsa.h
+        定义RSA数据结构以及RSA_METHOD，定义了RSA的各种函数。
+
+    2)  rsa_asn1.c
+        实现了RSA密钥的DER编码和解码，包括公钥和私钥。
+
+    3)  rsa_chk.c
+        RSA密钥检查。
+
+    4)  rsa_eay.c
+        Openssl实现的一种RSA_METHOD，作为其默认的一种RSA计算实现方式。
+        此文件未实现rsa_sign、rsa_verify和rsa_keygen回调函数。
+
+     5）rsa_err.c
+        RSA错误处理。
+
+     6）rsa_gen.c
+        RSA密钥生成，如果RSA_METHOD中的rsa_keygen回调函数不为空，则调用它，
+        否则调用其内部实现。
+
+     7）rsa_lib.c
+        主要实现了RSA运算的四个函数(公钥/私钥，加密/解密)，
+        它们都调用了RSA_METHOD中相应都回调函数。
+
+      8）rsa_none.c
+         实现了一种填充和去填充。
+
+      9）rsa_null.c
+         实现了一种空的RSA_METHOD。
+
+      10) rsa_oaep.c
+          实现了oaep填充与去填充。
+
+      11）rsa_pk1.
+          实现了pkcs1填充与去填充。
+
+      12）rsa_sign.c
+          实现了RSA的签名和验签。
+
+      13）rsa_ssl.c
+          实现了ssl填充。
+
+      14）rsa_x931.c
+          实现了一种填充和去填充。
+
+
+******************************
+17.3  RSA签名与验证过程
+******************************
+
+::
+
+    RSA签名过程如下：
+
+      1) 对用户数据进行摘要；
+      2）构造X509_SIG结构并DER编码，其中包括了摘要算法以及摘要结果。
+      3）对2）的结果进行填充，填满RSA密钥长度字节数。
+         比如1024位RSA密钥必须填满128字节。具体的填充方式由用户指定。
+      4）对3）的结果用RSA私钥加密。
+
+      RSA_eay_private_encrypt函数实现了3）和4）过程。
+
+    RSA验签过程是上述过程的逆过程，如下：
+
+      1) 对数据用RSA公钥解密，得到签名过程中2）的结果。
+      2) 去除1）结果的填充。
+      3) 从2）的结果中得到摘要算法，以及摘要结果。
+      4) 将原数据根据3）中得到摘要算法进行摘要计算。
+      5）比较4）与签名过程中1）的结果。
+
+      RSA_eay_public_decrypt实现了1）和2）过程。
+
+******************************
+17.4  数据结构
+******************************
+
+RSA主要数据结构定义在crypto/rsa/rsa.h中：
+
+17.4.1 RSA_METHOD
+==================
+
+::
+
+    struct rsa_meth_st {
+           const char      *name;
+           int (*rsa_pub_enc)(int flen, const unsigned char *from, unsigned char *to, RSA *rsa,int padding);
+           int (*rsa_pub_dec)(int flen, const unsigned char *from, unsigned char *to, RSA *rsa,int padding);
+           int (*rsa_priv_enc)(int flen, const unsigned char *from, unsigned char *to, RSA *rsa,int padding);
+           int (*rsa_priv_dec)(int flen, const unsigned char *from, unsigned char *to, RSA *rsa,int padding);
+           /* 其他函数 */
+           int (*rsa_sign)(int type, const unsigned char *m, unsigned int m_length,
+                           unsigned char *sigret, unsigned int *siglen, const RSA *rsa);
+           int (*rsa_verify)(int dtype,const unsigned char *m, unsigned int m_length,
+                             unsigned char *sigbuf, unsigned int siglen, const RSA *rsa);
+           int (*rsa_keygen)(RSA *rsa, int bits, BIGNUM *e, BN_GENCB *cb);
+    };
+
+    主要项说明：
+        name : RSA_METHOD名称；
+        rsa_pub_enc  : 公钥加密函数，padding为其填充方式，输入数据不能太长，否则无法填充；
+        rsa_pub_dec  : 公钥解密函数，padding为其去除填充的方式，输入数据长度为RSA密钥长度的字节数；
+        rsa_priv_enc : 私钥加密函数，padding为其填充方式，输入数据长度不能太长，否则无法填充；
+        rsa_priv_dec : 私钥解密函数，padding为其去除填充的方式，输入数据长度为RSA密钥长度的字节数；
+        rsa_sign   : 签名函数；
+        rsa_verify : 验签函数；
+        rsa_keygen : RSA密钥对生成函数。
+
+    用户可实现自己的RSA_METHOD来替换openssl提供的默认方法。
+
+17.4.2 RSA
+=============
+
+::
+
+    RSA数据结构中包含了公/私钥信息（如果仅有 n 和 e，则表明是公钥），定义如下：
+    struct rsa_st {
+           /* 其他 */
+           const RSA_METHOD *meth;
+           ENGINE *engine;
+           BIGNUM *n;
+           BIGNUM *e;
+           BIGNUM *d;
+           BIGNUM *p;
+           BIGNUM *q;
+           BIGNUM *dmp1;
+           BIGNUM *dmq1;
+           BIGNUM *iqmp;
+           CRYPTO_EX_DATA ex_data;
+           int references;
+           /* 其他数据项 */
+     };
+     各项意义：
+         meth  ：RSA_METHOD结构，指明了本RSA密钥的各种运算函数地址；
+         engine：硬件引擎；
+         n，e，d，p，q，dmp1，dmq1，iqmp：RSA密钥的各个值；
+         ex_data：扩展数据结构，用于存放用户数据；
+         references：RSA结构引用数。
+
+
+******************************
+17.5  主要函数
+******************************
+
+::
+
+    1) RSA_check_key
+
+       检查RSA密钥。
+       
+    2）RSA_new
+
+       生成一个RSA密钥结构，并采用默认的rsa_pkcs1_eay_meth RSA_METHOD方法。
+
+    3）RSA_free
+
+       释放RSA结构。
+
+    4) RSA *RSA_generate_key( int bits, 
+                              unsigned long e_value,
+                              void (*callback)(int,int,void *), 
+                              void *cb_arg )
+
+       生成RSA密钥.
+           bits : 是模数比特数，
+           e_value : 是公钥指数e，
+           callback : 回调函数由用户实现，用于干预密钥生成过程中的一些运算，可为空。
+
+    5）RSA_get_default_method
+
+       获取默认的 RSA_METHOD，为 rsa_pkcs1_eay_meth。
+
+    6）RSA_get_ex_data
+       获取扩展数据。
+
+    7）RSA_get_method
+       获取RSA结构的 RSA_METHOD。
+
+    8）RSA_padding_add_none
+       RSA_padding_add_PKCS1_OAEP
+       RSA_padding_add_PKCS1_type_1（私钥加密的填充）
+       RSA_padding_add_PKCS1_type_2（公钥加密的填充）
+       RSA_padding_add_SSLv23
+
+       各种填充方式函数。
+
+    9）RSA_padding_check_none
+       RSA_padding_check_PKCS1_OAEP
+       RSA_padding_check_PKCS1_type_1
+       RSA_padding_check_PKCS1_type_2
+       RSA_padding_check_SSLv23
+       RSA_PKCS1_SSLeay
+       各种去除填充函数。
+
+    10）int RSA_print(BIO *bp, const RSA *x, int off)
+
+        将RSA信息输出到 BIO 中，off 为输出信息在BIO中的偏移量，
+        比如是屏幕BIO，则表示打印信息的位置离左边屏幕边缘的距离。
+
+    11）int DSA_print_fp(FILE *fp, const DSA *x, int off)
+        将RSA信息输出到FILE中，off为输出偏移量。
+
+    12）RSA_public_decrypt
+
+        RSA公钥解密。
+
+    13）RSA_public_encrypt
+
+        RSA公钥加密。
+
+    14）RSA_set_default_method/ RSA_set_method
+
+        设置RSA结构中的method，当用户实现了一个RSA_METHOD时，
+        调用此函数来设置，使RSA运算采用用户的方法。
+
+    15）RSA_set_ex_data
+
+        设置扩展数据。
+
+    16）RSA_sign
+
+        RSA签名。
+
+    17）RSA_sign_ASN1_OCTET_STRING
+
+        另外一种RSA签名，不涉及摘要算法，它将输入数据作为 ASN1_OCTET_STRING 进行 DER 编码，
+        然后直接调用 RSA_private_encrypt 进行计算。
+
+    18）RSA_size
+
+        获取RSA密钥长度字节数。
+
+    19）RSA_up_ref
+
+        给RSA密钥增加一个引用。
+
+    20）RSA_verify
+
+        RSA验证。
+
+    21）RSA_verify_ASN1_OCTET_STRING
+
+        另一种 RSA 验证，不涉及摘要算法，与 RSA_sign_ASN1_OCTET_STRING 对应。
+
+    22）RSAPrivateKey_asn1_meth
+
+        获取 RSA 私钥的 ASN1_METHOD，包括 i2d、d2i、new 和 free 函数地址。
+
+    23）RSAPrivateKey_dup
+
+        复制RSA私钥。
+
+    24）RSAPublicKey_dup
+
+        复制RSA公钥。
+
+
+    TYPE *d2i_TYPE(TYPE **a, unsigned char **ppin, long length);
+    TYPE *d2i_TYPE_bio(BIO *bp, TYPE **a);
+    TYPE *d2i_TYPE_fp(FILE *fp, TYPE **a);
+
+    int i2d_TYPE(TYPE *a, unsigned char **ppout);
+    int i2d_TYPE_fp(FILE *fp, TYPE *a);
+    int i2d_TYPE_bio(BIO *bp, TYPE *a);
+
+    Type : 
+        d2i_RSAPrivateKey, d2i_RSAPrivateKey_bio, d2i_RSAPrivateKey_fp, 
+        d2i_RSAPublicKey, d2i_RSAPublicKey_bio, d2i_RSAPublicKey_fp, 
+        d2i_RSA_OAEP_PARAMS, 
+        d2i_RSA_PSS_PARAMS, 
+        d2i_RSA_PUBKEY, d2i_RSA_PUBKEY_bio, d2i_RSA_PUBKEY_fp
+
+        i2d_RSAPrivateKey, i2d_RSAPrivateKey_bio, i2d_RSAPrivateKey_fp, 
+        i2d_RSAPublicKey, i2d_RSAPublicKey_bio, i2d_RSAPublicKey_fp, 
+        i2d_RSA_OAEP_PARAMS, 
+        i2d_RSA_PSS_PARAMS, 
+        i2d_RSA_PUBKEY, i2d_RSA_PUBKEY_bio, i2d_RSA_PUBKEY_fp
+
+*******************
+17.6  编程示例
+*******************
+
+17.6.1 密钥生成
+==================
+
+* `Simple Public Key Encryption with RSA and OpenSSL <https://shanetully.com/2012/04/simple-public-key-encryption-with-rsa-and-openssl/>`_
+
+
+.. literalinclude:: ./code/17/6/1/main.c
+    :language: cpp
+
+17.6.2 RSA加解密运算
+========================
+
+.. literalinclude:: ./code/17/6/2/main.c
+    :language: cpp
+
+17.6.3 签名与验证
+========================
+
+.. literalinclude:: ./code/17/6/3/main.c
+    :language: cpp
+
+
+::
+
+   注意：本示例并不是真正的数据签名示例，因为没有做摘要计算。
+
+         ret=RSA_sign(nid,data,datalen,signret,&signlen,r)
+         将需要运算的数据放入X509_ALGOR数据结构并将其DER编码,
+         编码结果做RSA_PKCS1_PADDING 再进行私钥加密。
+
+         被签名数据应该是摘要之后的数据,
+         而本例没有先做摘要,接将数据拿去做运算.
+         因此 datalen 不能太长,保证 RSA_PKCS1_PADDING 私钥加密运算时输入数据的长度限制。
+         ret = RSA_verify(nid,data,datalen,signret,signlen,r)用来验证签名。
+
+-----
+
+ 
+参考文献：
+    [1]   PKCS #1 v2.1: RSA Cryptography Standard
+
+
+
