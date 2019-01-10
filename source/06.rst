@@ -6,16 +6,125 @@
 6.1 动态库加载
 *****************
 
+::
+
+     动态库加载函数能让用户在程序中加载所需要的模块，各个平台下的加载函数是不一样的。
+
+     动态加载函数一般有如下功能：
+
+       1）加载动态库
+
+             windows下的函数LoadLibraryA ；
+             linux  下的函数dlopen ;
+             这些函数一般需要动态库的名字作为参数。
+
+       2）获取函数地址
+
+                windows下的函数 GetProcAddress
+                linux  下的函数 dlsym。
+                这些函数一般需要函数名作为参数,回函数地址。
+
+       3）卸载动态库
+                 windows下的函数 FreeLibrary
+                 linux  下的函数 dlclose。
+
 *****************
 6.2 DSO概述
 *****************
+
+::
+
+    DSO 可以让用户动态加载动态库来进行函数调用。
+
+    各个平台下加载动态库的函数是不一样的,
+    openssl的DSO对各个平台台下的动态库加载函数进行了封装,增加了源码的可移植性。
+    Openssl的DSO功能主要用于动态加载压缩函数（ssl协议）和 engine(硬件加速引擎)。
+
+    Openssl的DSO功能除了封装基本的功能外还有其他辅助函数,
+    主要用于解决不同系统下路径不同的表示方式以及动态库全名不一样的问题。
+
+    比如windows系统下路径可以用“\\”和“/”表示,而linux下只能使用“/”;
+    windows下动态库的后缀为 .dll 而 linux 下动态库名字一般为 libxxx.so。
+
 
 *****************
 6.3 数据结构
 *****************
 
+::
+
+    dso数据结定义在crypto/dso/dso.h中，如下所示：
+
+           struct dso_st {
+                  DSO_METHOD *meth;
+                  STACK *meth_data;
+                  int references;
+                  int flags;
+                  CRYPTO_EX_DATA ex_data;
+                  DSO_NAME_CONVERTER_FUNC name_converter;
+                  DSO_MERGER_FUNC merger;
+                  char *filename;
+                  char *loaded_filename;
+           };
+
+           meth: 指出了操作系统相关的动态库操作函数。
+           meth_data:堆栈中存放了加载动态库后的句柄。
+           references:  引用计数，
+                       DSO_new    时置1，
+                       DSO_up_ref 时加1,
+                       DSO_free   时减1。
+
+                       当调用DSO_free时,
+                           只有当前的 references 为 1 时
+                           才真正释放meth_data中存放的句柄。
+
+           flags: 与加载动态库时加载的文件名以及加载方式有关,用于DSO_ctrl函数。
+
+           DSO_convert_filename: 当加载动态库时会调用DSO_convert_filename函数来确定所加载的文件.
+                                 而DSO_convert_filename函数会调用各个系统
+                                 自己的convert函数来获取这个文件名。
+
+               对于flags有三种种操作命令：设置、读取和或的关系，对应定义如下：
+
+                   #define DSO_CTRL_GET_FLAGS      1
+                   #define DSO_CTRL_SET_FLAGS       2
+                   #define DSO_CTRL_OR_FLAGS       3
+               而flags可以设置的值有如下定义：
+                   #define DSO_FLAG_NO_NAME_TRANSLATION            0x01
+                   #define DSO_FLAG_NAME_TRANSLATION_EXT_ONLY      0x02
+                   #define DSO_FLAG_UPCASE_SYMBOL                         0x10
+                   #define DSO_FLAG_GLOBAL_SYMBOLS                       0x20
+               意义说明如下：
+                   DSO_FLAG_NO_NAME_TRANSLATION
+                   加载的文件名与指定的文件名一致，不加后缀.dll(windows)或.so(linux或unix)。
+                   DSO_FLAG_NAME_TRANSLATION_EXT_ONLY
+                   加载的文件名会加上lib串，比如用户加载eay32,真正加载时会加载libeay32(适用于linux或unix)。
+                   DSO_FLAG_UPCASE_SYMBOL
+                   适用于OpenVMS。
+                   DSO_FLAG_GLOBAL_SYMBOLS
+                   适用于unix,当在unix下调用加载函数dlopen时,参数会被或上RTLD_GLOBAL。
+
+           ex_data：扩展数据，没有使用。
+
+           name_converter:：指明了具体系统需要调用的名字计算函数。
+
+           loaded_filename：指明了加载动态库的全名。
+
 *****************
 6.4 编程示例
 *****************
+
+
+1
+==
+
+.. literalinclude:: ./code/6/4/1/main.c
+   :language: cpp
+
+2
+===
+
+.. literalinclude:: ./code/6/4/2/main.c
+   :language: cpp
 
 

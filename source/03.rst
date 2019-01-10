@@ -2,6 +2,9 @@
 3 堆栈
 #################
 
+::
+
+    man DEFINE_STACK_OF
 
 * https://www.openssl.org/docs/man1.1.1/man3/sk_TYPE_num.html
 * https://blog.csdn.net/as3luyuan123/article/details/17081581

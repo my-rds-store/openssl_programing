@@ -2,20 +2,136 @@
 5 内存分配
 ###############
 
+::
+
+    man openssl_malloc
 
 *********************
 5.1 openssl内存分配
 *********************
 
+::
+
+    用户在使用内存时，容易犯的错误就是内存泄露。
+    当用户调用内存分配和释放函数时,查找内存泄露比较麻烦。
+
+    openssl提供了内置的内存分配/释放函数。
+    如果用户完全调用openssl的内存分配和释放函数,可以方便的找到内存泄露点。
+
+    openssl分配内存时,在其内部维护一个内存分配哈希表,用于存放已经分配但未释放的内存信息。
+    当用户申请内存分配时，在哈希表中添加此项信息，内存释放时删除该信息。
+    当用户通过openssl函数查找内存泄露点时，只需查询该哈希表即可。
+    用户通过openssl回调函数还能处理那些泄露的内存。
+
+    openssl供用户调用的内存分配等函数主要在crypto/mem.c中实现,其内置的分配函数在crypto/mem_dbg.c中实现。
+    默认情况下 mem.c 中的函数调用 mem_dbg.c 中的实现。
+
+    如果用户实现了自己的内存分配函数以及查找内存泄露的函数,
+    可以通过调用 CRYPTO_set_mem_functions 函数和 CRYPTO_set_mem_debug_functions 函数来设置。
+
+
 *********************
 5.2 内存数据结构
 *********************
+
+::
+
+    openssl内存分配数据结构是一个内部数据结构，定义在crypto/mem_dbg.c中。
+
+    如下所示：
+
+    typedef struct app_mem_info_st {
+           unsigned long thread;
+           const char *file;
+           int line;
+           const char *info;
+           struct app_mem_info_st *next; /* tail of thread's stack */
+           int references;
+    } APP_INFO;
+
+    typedef struct mem_st {
+             void *addr;
+             int num;
+             const char *file;
+             int line;
+             unsigned long thread;
+             unsigned long order;
+             time_t time;
+             APP_INFO *app_info;
+      } MEM;
+
+      各项意义：
+          addr : 分配内存的地址。
+          num  : 分配内存的大小。
+          file : 分配内存的文件。
+          line : 分配内存的行号。
+          thread : 分配内存的线程ID。
+          order  : 第几次内存分配。
+          time   : 内存分配时间。
+          app_info : 用于存放用户应用信息，为一个链表，里面存放了文件、行号以及线程ID等信息。
+          references : 被引用次数。
 
 *********************
 5.3 主要函数
 *********************
 
+::
+
+    1) CRYPTO_mem_ctrl
+
+       本函数主要用于控制内存分配时，是否记录内存信息。
+       如果不记录内存信息，将不能查找内存泄露。
+       开启内存记录调用CRYPTO_mem_ctrl(CRYPTO_MEM_CHECK_ON)，
+       关闭内存记录调用CRYPTO_mem_ctrl(CRYPTO_MEM_CHECK_OFF)。
+       一旦CRYPTO_mem_ctrl(CRYPTO_MEM_CHECK_ON)被调用，
+       直到用户调用CRYPTO_mem_ctrl(CRYPTO_MEM_CHECK_OFF)前，
+       用户所有的opessl内存分配都会被记录。
+
+    2) CRYPTO_is_mem_check_on
+
+      查询内存记录标记是否开启。
+
+    3）CRYPTO_dbg_malloc
+
+       本函数用于分配内存空间，如果内存记录标记开启，则记录用户申请的内存。
+       当需要记录内存信息时，该函数本身也需要申请内存插入哈希表，为了防止递归申请错误，
+       它申请内存记录信息前必须暂时关闭内存记录标记，申请完毕再放开。
+
+    4）CRYPTO_dbg_free
+
+       释放内存，如果内存记录标记开启，还需要删除哈希表中对应的记录。
+
+    5）CRYPTO_mem_leaks
+
+       将内存泄露输出到BIO中。
+
+    6）CRYPTO_mem_leaks_fp
+
+       将内存泄露输出到FILE中(文件或者标准输出)，
+       该函数调用了CRYPTO_mem_leaks。
+
+    7）CRYPTO_mem_leaks_cb
+
+       处理内存泄露，输入参数为用户自己实现的处理内存泄露的函数地址。
+       该函数只需要处理一个内存泄露，
+       openssl通过lh_doall_arg调用用户函数来处理所有记录(泄露的内存)。
+
 *********************
 5.4 编程示例
 *********************
+
+1
+=====
+
+.. literalinclude:: ./code/5/4/1/main.c
+   :language: cpp
+
+2
+=====
+
+.. literalinclude:: ./code/5/4/1/main.c
+   :language: cpp
+
+
+
 
