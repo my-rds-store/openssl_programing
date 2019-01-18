@@ -1,0 +1,109 @@
+##################
+10  文本数据库
+##################
+
+**********************
+10.1 概述
+**********************
+
+::
+
+        Openss实现了一个简单的文本数据库，它可以从文件读取数据和将数据写到文件中，
+        并且可以根据关键字段来查询数据。
+        Openssl的文本数据库供apps/目录下的文件调用，比如apps.c、ca.c和ocsp.c。
+        openssl文本数据库典型的例子为apps/demoCA/index.txt。
+        文本数据库一行代表数据库的一行，各个列之间必须用一个\t隔开，用#进行注释(#必须在开始位置)，以空行结束。
+        比如下面的例子：
+
+            赵春平  28  湖北
+            zcp 28  荆门
+
+        文本数据库的查找用到了哈希表。
+        openssl读取的所有行数据存放在堆栈中，并为每一列数据建立一个单独的哈希表。
+        每个哈希表中存放了所有行数据的地址。
+        查询时，用户指定某一列，openssl根据对应的哈希表进行查找。
+
+**********************
+10.2 数据结构
+**********************
+
+::
+
+    数据结构在crypto/txt_db/txt_db.h中定义，如下：
+
+           typedef struct txt_db_st
+           {
+                  int num_fields;
+                  STACK *data;
+                  LHASH **index;
+                  int (**qual)(char **);
+                  long error;
+                  long arg1;
+                  long arg2;
+                  char **arg_row;
+           } TXT_DB;
+
+           意义如下:
+
+           num_fields: 表明文本数据库的列数。
+           data:  用来存放数据,
+                  每一行数据组织成为一个字符串数组(每个数组值对应该行的一列),
+                  并将此数组地址push到堆栈中。
+           index: 哈希表数组，每一列对应一个哈希表。每一列都可以建哈希表，如果不建哈希表将不能查找该列数据。
+           qual:  一个函数地址数组，数组的每个元素对应一列， 进行插入该列哈希表前的过滤。
+                  这些函数用于判断一行数据的一列或者多列是否满足某种条件,
+                  如果满足将不能插入到哈希表中去(但是能存入堆栈)。
+                  每一列都可以设置一个这样的函数。这些函数由用户实现。
+                  比如，一个文本数据库中，有名字列和年龄列，并且要求名字长度不能小于2， 年龄不能小于0和大于200。
+                  用户为名字列实现了一个qual函数，只用来检查名字长度，对于年龄列实现一个qual函数，只用来检查年龄。                  当用户要插入一条记录，名字长度为1，但是年龄合法，那么该记录能插入到年龄列对应的哈希表中，
+                  而不能插入名字列对应的哈希表。
+
+           error、arg1、arg2和arg_row用于存放错误信息。
+
+
+**********************
+10.3 函数说明
+**********************
+
+::
+
+    1）TXT_DB *TXT_DB_read(BIO *in, int num)
+
+       用于从BIO中读入数据，转换为TXT_DB，num用于明确指明列数，本函数不建立哈希表。
+
+    2）long TXT_DB_write(BIO *out, TXT_DB *db)
+
+       将TXT_DB内容写入BIO；
+
+    3）int TXT_DB_create_index( TXT_DB *db,
+                                int field, 
+                                int (*qual)(char **),
+                                LHASH_HASH_FN_TYPE hash, 
+                                LHASH_COMP_FN_TYPE cmp )
+
+           给field指定的列建立哈希表。
+
+           db为需要建索引的TXT_DB，
+           hash为一行数据的hash运算回调函数，
+           cmp为一行数据的比较函数。
+
+    4）char **TXT_DB_get_by_index(TXT_DB *db, int idx, char **value)
+
+        根据关键字段来查询数据，查询结果返回一行数据db为文本数据库，
+        idx表明采用哪一列的哈希表来查找；value为查询条件。
+
+    5）int TXT_DB_insert(TXT_DB *db,char **value)
+
+       往TXT_DB中插入一行数据。value数组以NULL表示结束。
+
+    6) void TXT_DB_free(TXT_DB *db)
+
+       清除TXT_DB。
+
+**********************
+10.4 编程示例
+**********************
+
+.. literalinclude:: ./code/10/4/1/main.c
+   :language: cpp
+

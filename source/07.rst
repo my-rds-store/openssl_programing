@@ -304,12 +304,17 @@ BIO 数据结构主要有 2 个，在 crypto/bio.h 中定义如下:
 7.4.6 SSl BIO
 ================
 
-( 待补充 ）
 
-::
+.. literalinclude:: ./code/7/4/6/main.c
+   :language: cpp
 
-    本函数用 ssl bio 来链接 mybank.icbc.com.cn 的 https 服务，并请求首页文件。
-    其中 SSLeay_add_ssl_algorithms 和 OpenSSL_add_all_algorithms 函数必不可少，否则不能找到 
-    ssl 加密套件并且不能找到各种算法。
+
+7.4.7 其他 
+================
+
+
+.. literalinclude:: ./code/7/4/7/main.c
+   :language: cpp
+
 
 

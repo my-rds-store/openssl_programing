@@ -57,38 +57,125 @@
 
     大数函数一般都能根据函数名字知道其实现的功能。下面简单介绍了几个函数。
 
-    1） BN_rand/BN_pseudo_rand
+    1） 
+        int BN_rand(BIGNUM *rnd, int bits, int top, int bottom);
+        int BN_priv_rand(BIGNUM *rnd, int bits, int top, int bottom);
+        int BN_pseudo_rand(BIGNUM *rnd, int bits, int top, int bottom);
+
         生成一个随机的大数。
-    2） BN_rand_range/BN_pseudo_rand_range
+
+    2） 
+        int BN_rand_range(BIGNUM *rnd, BIGNUM *range);
+        int BN_priv_rand_range(BIGNUM *rnd, BIGNUM *range);
+        int BN_pseudo_rand_range(BIGNUM *rnd, BIGNUM *range);
+
         生成随机数，但是给出了随机数的范围。
-    3） BN_dup
+
+    3） 
+        BIGNUM *BN_copy(BIGNUM *to, const BIGNUM *from);
+        BIGNUM *BN_dup(const BIGNUM *from);
+        void BN_with_flags(BIGNUM *dest, const BIGNUM *b, int flags);
+
         大数复制。
-    4)  BN_generate_prime
+
+    4)  
+        int BN_generate_prime_ex(BIGNUM *ret, int bits, int safe, const BIGNUM *add,
+                               const BIGNUM *rem, BN_GENCB *cb);
+
+        #if OPENSSL_API_COMPAT < 0x00908000L
+        BIGNUM *BN_generate_prime(BIGNUM *ret, int num, int safe, BIGNUM *add,
+                                  BIGNUM *rem, void (*callback)(int, int, void *),
+                                  void *cb_arg);
+
         生成素数。
+
     5） int BN_add_word(BIGNUM *a, BN_ULONG w)
-        给大数a加上w，如果成功，返回1。
 
-    6)  BIGNUM *BN_bin2bn(const unsigned char *s, int len, BIGNUM *ret)
-        将内存中的数据转换为大数，为内存地址，len为数据长度，ret为返回值。
+        给大数a加上w，
 
-    7) int BN_bn2bin(const BIGNUM *a, unsigned char *to)
-       将大数转换为内存形式。输入参数为大数a，to为输出缓冲区地址，缓冲区需要预先分配，
-       返回值为缓冲区的长度。
-    8) char *BN_bn2dec(const BIGNUM *a)
-       将大数转换成整数字符串。返回值中存放整数字符串，它由内部分配空间，
-       用户必须在外部用OPENSSL_free函数释放该空间。
+            BN_add_word() adds w to a ("a+=w").
+            BN_sub_word() subtracts w from a ("a-=w").
+            BN_mul_word() multiplies a and w ("a*=w").
+            BN_div_word() divides a by w ("a/=w") and returns the remainder.
+            BN_mod_word() returns the remainder of a divided by w ("a%w").
 
-    9) char *BN_bn2hex(const BIGNUM *a)
-       将大数转换为十六进制字符串。返回值为生成的十六进制字符串，
-       外部需要用OPENSSL_free函数释放
+            For BN_div_word() and BN_mod_word(), w must not be 0.
 
-    10)  BN_cmp
-           比较两个大数。
+        return 1 for success, 0 on error
+
+
+    6)  转换 
+
+      6.1
+           BIGNUM * BN_bin2bn(const unsigned char *s, int len, BIGNUM *ret)
+
+           将 s 中的换为大数，
+           
+           入参
+               s  : 为内存地址，
+               len : 为数据长度，
+           出参:
+               ret : 为返回值。
+
+      6.2 
+
+           int BN_bn2bin(const BIGNUM *a, unsigned char *to)
+
+           将大数转换为内存形式。
+
+           入参:
+                   a  : 大数，
+                   to : 为输出缓冲区地址，缓冲区需要预先分配,可以为NULL，
+
+           return : 返回冲区的长度。
+
+           BN_bn2bin() returns the length of the big-endian number placed at to.  
+           BN_bin2bn() returns the BIGNUM, NULL on error
+
+       6.3
+
+           char *BN_bn2dec(const BIGNUM *a)
+
+           将大数转换成整数字符串。
+
+           return : 返回值中存放 整数字符串，它由内部分配空间，
+                    用户必须在外部用OPENSSL_free函数释放该空间。
+
+
+           int BN_dec2bn(BIGNUM **a, const char *str);  //将整数字符串转换成大数。
+
+      6.4
+
+           char *BN_bn2hex(const BIGNUM *a)
+
+           将大数转换为十六进制字符串。
+
+           return: 返回值为生成的十六进制字符串，
+                   外部需要用OPENSSL_free函数释放
+
+           int BN_hex2bn(BIGNUM **a, const char *str); // 将十六进制字符串转换为大数 
+
+
+           BN_bn2hex() and BN_bn2dec() return a null-terminated string, or NULL on error. 
+           BN_hex2bn() and BN_dec2bn() return the number of characters used in parsing, 
+           or 0 on error, in which case no new BIGNUM will be created.
+
+    10)  比较
+        int BN_cmp(BIGNUM *a, BIGNUM *b);  比较两个大数。
+        int BN_ucmp(BIGNUM *a, BIGNUM *b); 比较两个大数绝对值。
+
+        int BN_is_zero(BIGNUM *a);
+        int BN_is_one(BIGNUM *a);
+        int BN_is_word(BIGNUM *a, BN_ULONG w);
+        int BN_is_odd(BIGNUM *a);
+
+
     11）BIGNUM *BN_mod_inverse( BIGNUM *in,  
                                 const BIGNUM *a, 
                                 const BIGNUM *n, 
                                 BN_CTX *ctx)
         计算ax=1(mod n)。
+
 
     用户使用openssl函数编程时， 一般用不着进行大数运算。
     BN_bin2bn、BN_hex2bn、BN_dec2bn、BN_bin2bn、BN_bn2bin、BN_bn2hex和BN_bn2dec比较常用。
@@ -200,6 +287,7 @@
       int BN_mod_exp(BIGNUM *r, BIGNUM *a, const BIGNUM *p,
       const BIGNUM *m, BN_CTX *ctx); r=pow(a,p)%M
       int BN_gcd(BIGNUM *r, BIGNUM *a, BIGNUM *b, BN_CTX *ctx);r=a,b最大公约数
+
       int BN_add_word(BIGNUM *a, BN_ULONG w);
       int BN_sub_word(BIGNUM *a, BN_ULONG w);
       int BN_mul_word(BIGNUM *a, BN_ULONG w);
@@ -245,14 +333,14 @@
 
     10．位数函数
 
-      int BN_set_bit(BIGNUM *a, int n);将a中的第n位设置为1，假如a小于n位将扩展
-      int BN_clear_bit(BIGNUM *a, int n);将a中的第n为设置为0，假如a小于n位将出错
+      int BN_set_bit(BIGNUM *a, int n); 将a中的第n位设置为1，假如a小于n位将扩展
+      int BN_clear_bit(BIGNUM *a, int n); 将a中的第n为设置为0，假如a小于n位将出错
       int BN_is_bit_set(const BIGNUM *a, int n);测试是否已经设置，1表示已设置
-      int BN_mask_bits(BIGNUM *a, int n);将a截断至n位，假如a小于n位将出错
-      int BN_lshift(BIGNUM *r, const BIGNUM *a, int n);a左移n位，结果存于r
-      int BN_lshift1(BIGNUM *r, BIGNUM *a); a左移1位，结果存于r
+      int BN_mask_bits(BIGNUM *a, int n); 将a截断至n位，假如a小于n位将出错
+      int BN_lshift(BIGNUM *r, const BIGNUM *a, int n); a左移n位，结果存于r
+      int BN_lshift1(BIGNUM *r, BIGNUM *a);       a左移1位，结果存于r
       int BN_rshift(BIGNUM *r, BIGNUM *a, int n); a右移n位，结果存于r
-      int BN_rshift1(BIGNUM *r, BIGNUM *a); a左移1位，结果存于r
+      int BN_rshift1(BIGNUM *r, BIGNUM *a);       a左移1位，结果存于r
      
     11．与字符串的转换函数
       int BN_bn2bin(const BIGNUM *a, unsigned char *to);将abs（a）转化为字符串存入to，to的空间必须大于BN_num_bytes(a)

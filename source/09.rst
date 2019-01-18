@@ -1,0 +1,145 @@
+#############
+9 随机数
+#############
+
+
+*************
+9.1 随机数
+*************
+
+::
+
+    随机数是一种无规律的数，但是真正做到完全无规律也较困难，
+    所以一般将它称之为伪随机数。随机数在密码学用的很多，
+    比如ssl握手中的客户端hello和服务端hello消息中都有随机数；
+    ssl握手中的预主密钥是随机数；RSA密钥生成也用到随机数。
+    如果随机数有问题，会带来很大的安全隐患。
+
+    软件生成随机数一般预先设置随机数种子，再生成随机数。
+    设置随机数种子可以说是对生成随机数过程的一种扰乱，让产生的随机数更加无规律可循。
+
+    生成随机数有多种方法，可以是某种算法也可以根据某种或多种随机事件来生成。
+    比如，鼠标的位置、系统的当前时间、本进程/线程相关信息以及机器噪声等。
+
+    安全性高的应用一般都采用硬件方式(随机数发生器)来生成随机数。
+
+************************************
+9.2 OpenSSl 随机数数据结构与源码
+************************************
+
+::
+
+    openssl生成随机数的源码位于crypto/rand目录下。
+
+    rand.h定义了许多与随机数生成相关的函数。
+    openssl通过使用摘要算法来生成随机数，可用的摘要算法有：sha1、md5、mdc2和md2。具体采用那种摘要算法在crypto/rand_lcl.h中由宏来控制。Openssl维护一个内部随机状态数据(md_rand.c中定义的全局变量state和md)，通过对这些内部数据计算摘要来生成随机数。
+
+           Openssl随机数相关的数据结构如下，定义在rand.h中：
+           struct rand_meth_st
+           {
+                  void (*seed)(const void *buf, int num);
+                  int (*bytes)(unsigned char *buf, int num);
+                  void (*cleanup)(void);
+                  void (*add)(const void *buf, int num, double entropy);
+                  int (*pseudorand)(unsigned char *buf, int num);
+                  int (*status)(void);
+           };
+           本结构主要定义了各种回调函数，如果用户需要实现自己的随机数生成函数，
+           他需要实现本结构中的各个函数。
+
+           Openssl给出了一个默认的基于摘要的rand_meth实现(crypto/md_rand.c)。各项意义如下：
+
+           seed：种子函数，为了让openssl内部维护的随机数据更加无序，可使用本函数。
+                   buf为用户输入的随机数地址， num为其字节数。 
+                   Openssl将用户提供的buf中的随机内容与其内部随机数据进行摘要计算，
+                   更新其内部随机数据。本函数无输出；
+
+           bytes：生成随机数，openssl根据内部维护的随机数状态来生成结果。
+                  buf用于存放生成的随机数。num为输入参数，用来指明生成随机数的字节长度；
+           cleanup：清除函数，本函数将内部维护的随机数据清除；
+           add：与seed类似，也是为了让openssl内部随机数据更加无序，
+                其中entropy(信息熵)可以看作用户本次加入的随机数的个数。
+                Openssl默认的随机数熵为32字节，
+                在rand_lcl.h中由ENTROPY_NEEDED定义。
+                Openssl给出随机数之前，用户提供的所有的随机种子数之和必须达到32字节。
+                在openssl实现的md_rand中，即使用户不调用种子函数来直接生成随机数，
+                openssl也会调用RAND_poll函数来完成该操作。
+
+           pseudorand：本函数与bytes类似也是来生成随机数。
+
+            status：查看熵值是否达到预定值，openssl中为32字节，如果达到则返回1，否则返回0。
+                    在openssl实现的md_rand中该函数会调用RAND_poll函数来使熵值合格。
+                    如果本函数返回0，则说明此时用户不应生成随机数，需要调用seed和add函数来添加熵值。
+
+    cypto/rand目录下的主要源码有：
+    1)    md_rand.c
+        它实现了基于摘要的随机数生成。
+    2)    rand_lib.c
+        该文件中的源码简单调用了rand_meth中的回调函数。
+    3）  rand_win.c/rand_unix.c/rand_os2.c等
+        这些源码主要提供了平台相关的RAND_poll函数实现和其他系统特有函数的实现。
+        比如rand_win.c实现了RAND_screen函数，用户根据屏幕来设置随机数种子。
+    4）  randfile.c
+        用于从随机文件中加载种子、生成随机数文件以及获取随机文件名。
+        比如默认的随机数文件为.rnd文件，如果找不到该文件，
+        openbsd可能会返回/dev/arandom。
+
+
+*************
+9.3 主要函数
+*************
+
+::
+
+    1) int RAND_load_file(const char *file, long bytes)
+
+       本函数将file指定的随机数文件中的数据读取bytes字节(如果bytes大于1024，则读取1024字节),
+       调用RAND_add进行计算，生成内部随机数。
+
+    2)  RAND_write_file
+
+        生成一个随机数文件。
+
+    3)  const char *RAND_file_name(char *file,size_t num)
+
+        获取随机数文件名，如果随机数文件长度小于num则返回空，否则返回文件名。
+
+    4)  RAND_poll
+
+        用于计算内部随机数，各个平台有各自的实现。
+
+    5)  RAND_screen/RAND_event
+
+        Windows特有函数，用来计算内部随机数，他们调用了RAND_seed。
+
+    6)  RAND_seed/RAND_add
+
+        用来计算内部随机数。
+
+    7) RAND_bytes/RAND_pseudo_bytes
+
+        用来计算随机数。
+
+    8) RAND_cleanup
+
+        清除内部随机数。
+
+    10) RAND_set_rand_method
+
+        用来设置rand_meth,
+        当用户实现了自己的随机数生成函数时(实现rand_meth中的回调函数),
+        调用该方法来替换openssl 所提供的随机数功能。
+
+    11) RAND_status
+
+        用来查看内部随机数熵值是否已达到预定值,
+        如果未达到,则不应该生成随机数。
+
+*************
+9.4 编程示例
+*************
+
+
+.. literalinclude:: ./code/9/4/1/main.c
+   :language: cpp
+

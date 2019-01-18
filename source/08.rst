@@ -1,0 +1,118 @@
+#############
+8 配置文件
+#############
+
+****************
+8.1 概述
+****************
+
+::
+
+    Openssl 采用自定义的配置文件来获取配置信息。
+
+    Openssl的配置文件主要由如下内容组成：
+
+        注释信息   : 注释信息由 # 开头；
+        段信息     : 段信息由 [xxx] 来表示，其中xxx为段标识；
+        属性-值信息: 表示方法为 a = b，这种信息可以在一个段内也可以不属于任何段。
+
+    典型配置文件为apps/openssl.cnf(同时该文件也是openssl最主要的配置文件)。
+    摘取部分内容如下：
+
+    # OpenSSL example configuration file.
+    oid_section  = new_oids
+    [ CA_default ]
+    dir   = ./demoCA      # Where everything is kept
+    certs = $dir/certs    # Where the issued certs are kept
+    default_days  = 365   # 注意，这里是一个数字
+
+
+****************
+8.2 OpenSSl 配置
+****************
+
+::
+
+    OpenSSL 读取配置文件的实现源码在crypto/conf中,
+    要函数定义在conf.h中。
+
+    函数一般以 CONF 或 NCONF(new conf,新函数)开头。
+    本文主要介绍了新的conf函数的使用方。
+    主要的数据结构在crypto/conf.h中定义如下：
+
+           typedef struct
+           {
+               char *section;
+               char *name;
+               char *value;
+           } CONF_VALUE;
+
+           section 表明配置文件的段，
+           name    表示这个段中的一个属性，
+           value   则是这个属性的值。
+
+     Openssl采用哈希表来存放这些信息，便于快速查找。
+
+
+****************
+8.3 主要函数
+****************
+
+::
+
+      1) NCONF_new
+
+         生成一个CONF结构。
+
+      2) CONF_free
+
+         释放空间，以及释放存储在散列表中的数据。
+
+      3) CONF_load
+
+        函数定义：
+            LHASH *CONF_load(LHASH *conf, const char *file, long *eline)，
+            该函数根据输入配置文件名，读取信息存入散列表，如果有错，eline为错误行。
+
+      4) CONF_load_bio/ CONF_load_fp
+
+         根据bio或者文件句柄读取配置信息并存入散列表。
+
+      5) CONF_get_section
+
+         给定段信息，得到散列表中的所有对应值。
+         用于获取配置文件中指定某个段下的所有信息,
+         这些信息存放在CONF_VALUE的堆栈中。
+
+      6) CONF_get_string
+
+         给定段以及属性值，得到对应的字符串信息。
+
+      7) CONF_get_number
+
+         给定段和属性值，获取对应的数值信息。
+
+      8）CONF_get1_default_config_file
+
+        获取默认的配置文件名，比如openssl.cnf。
+
+
+****************
+8.4 编程示例
+****************
+
+示例 1
+========
+
+.. literalinclude:: ./code/8/4/1/main.c
+   :language: cpp
+
+示例 2
+========
+
+.. literalinclude:: ./code/8/4/2/main.c
+   :language: cpp
+
+
+
+
